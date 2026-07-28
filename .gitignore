@@ -1,0 +1,17 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+.venv/
+
+# OSX
+.DS_Store
+
+# Env files
+.env
+
+# Credentials
+config/credentials.json
+config/token.json

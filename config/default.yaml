@@ -1,0 +1,45 @@
+# Default configuration for TAC
+app:
+  data_dir: "./data"
+  db_path: "./data/tac.db"
+  approved_agents:
+    emails:
+      - "tomeka@example.com"
+      - "anna@example.com"
+    aliases:
+      tomeka@example.com:
+        - "Tomeka"
+      anna@example.com:
+        - "Anna"
+
+gmail:
+  credentials_path: "./config/credentials.json"
+  token_storage: "keyring"
+  token_file_path: "./config/token.json"
+  use_pubsub_push: false
+  pubsub:
+    topic_name: ""
+    subscription_name: ""
+  watch:
+    label_filter: "label:inbox"
+    expiration_seconds: 604800
+  polling:
+    enabled: true
+    interval_seconds: 30
+
+logging:
+  structured: true
+  level: INFO
+  json_logs_file: "./logs/tac.json.log"
+
+processing:
+  required_document_types:
+    - application
+    - id
+    - paystubs
+    - tax_return
+  package_order:
+    - application
+    - id
+    - paystubs
+    - tax_return

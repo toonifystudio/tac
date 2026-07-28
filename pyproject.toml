@@ -1,0 +1,23 @@
+[project]
+name = "tac"
+version = "0.1.0"
+description = "Tenant Application Check (TAC)"
+requires-python = ">=3.12"
+
+[tool.poetry.dependencies]
+python = ">=3.12"
+SQLAlchemy = "^2.0"
+PyYAML = "^6.0"
+python-dotenv = "^1.0"
+keyring = "^23.0"
+cryptography = "^41.0"
+google-api-python-client = "^2.70"
+google-auth = "^2.20"
+google-auth-oauthlib = "^1.0"
+pytest = "^7.0"
+
+[tool.black]
+line-length = 88
+
+[tool.ruff]
+line-length = 88
