@@ -1,0 +1,34 @@
+@@
+     const pkgSection = document.createElement('section');
+     pkgSection.innerHTML = '<h4>Packages</h4>';
+     data.packages.forEach(p => {
+       const a = document.createElement('a');
+       a.href = `/api/packages/${p.id}/file`;
+       a.innerText = `Download package ${p.id}`;
+       a.target = '_blank';
+       pkgSection.appendChild(a);
+     });
+-    el.appendChild(pkgSection);
++    // Reprocess and history
++    const reprocBtn = document.createElement('button');
++    reprocBtn.innerText = 'Reprocess Application';
++    reprocBtn.addEventListener('click', async () => {
++      if (!confirm('Reprocess will re-run OCR/classification/packaging for this application. Proceed?')) return;
++      const resp = await fetch(`${API_BASE}/applications/${data.id}/reprocess`, {method:'POST'});
++      if (resp.ok) { alert('Reprocess started'); loadDetail(id); } else { alert('Failed to start reprocess'); }
++    });
++    pkgSection.appendChild(reprocBtn);
++    el.appendChild(pkgSection);
++
++    const histSection = document.createElement('section');
++    histSection.innerHTML = '<h4>Processing History</h4>';
++    const histList = document.createElement('ul');
++    const hr = await fetch(`${API_BASE}/applications/${data.id}/history`);
++    if (hr.ok) {
++      const events = await hr.json();
++      events.forEach(ev => {
++        const li = document.createElement('li'); li.innerText = `${ev.created_at}: ${ev.event_type} - ${ev.message}`; histList.appendChild(li);
++      });
++    }
++    histSection.appendChild(histList);
++    el.appendChild(histSection);

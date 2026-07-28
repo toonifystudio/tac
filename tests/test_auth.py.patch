@@ -1,0 +1,10 @@
+from rental_app.web import app
+
+
+def test_auth_protected(tmp_path, monkeypatch):
+    monkeypatch.setenv('TAC_ADMIN_USER', 'admin')
+    monkeypatch.setenv('TAC_ADMIN_PASS', 'pass')
+    client = app.test_client()
+    rv = client.get('/')
+    # since login_required redirects, assert 302
+    assert rv.status_code == 302
