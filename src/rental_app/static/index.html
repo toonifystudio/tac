@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TAC Review Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>TAC — Review Dashboard</h1>
+      <div class="filters">
+        <label for="stateFilter">Filter by state:</label>
+        <select id="stateFilter">
+          <option value="">All</option>
+          <option value="Awaiting My Approval">AWAITING_MY_APPROVAL</option>
+          <option value="Missing Documents">MISSING_DOCUMENTS</option>
+          <option value="Error">ERROR</option>
+          <option value="Approved">APPROVED</option>
+        </select>
+        <button id="refreshBtn">Refresh</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="list" id="applicationsList">
+        <h2>Applications</h2>
+        <table id="appsTable">
+          <thead>
+            <tr><th>ID</th><th>Message</th><th>Received</th><th>State</th><th>Missing</th><th>Error</th></tr>
+          </thead>
+          <tbody id="appsTbody"></tbody>
+        </table>
+      </section>
+
+      <aside class="detail" id="appDetail">
+        <h2>Application</h2>
+        <div id="detailContent">Select an application to see details</div>
+      </aside>
+    </main>
+
+    <footer>
+      <small>Local dashboard — drafts are only sent after approval</small>
+    </footer>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
