@@ -51,6 +51,7 @@ class Application(Base):
     email_record = relationship("EmailRecord", back_populates="application")
     documents = relationship("Document", back_populates="application", cascade="all, delete-orphan")
     packages = relationship("Package", back_populates="application", cascade="all, delete-orphan")
+    notes = relationship("ReviewerNote", back_populates="application", cascade="all, delete-orphan")
 
 
 class Document(Base):
@@ -91,3 +92,14 @@ class Draft(Base):
     subject = Column(String(512))
     body = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ReviewerNote(Base):
+    __tablename__ = "reviewer_notes"
+    id = Column(Integer, primary_key=True)
+    application_id = Column(Integer, ForeignKey("applications.id"), nullable=False)
+    reviewer = Column(String(128))
+    note = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    application = relationship("Application", back_populates="notes")
