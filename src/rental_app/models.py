@@ -49,6 +49,8 @@ class Application(Base):
     meta = Column(JSON, default={})
     email_record_id = Column(Integer, ForeignKey("email_records.id"), nullable=True)
     email_record = relationship("EmailRecord", back_populates="application")
+    documents = relationship("Document", back_populates="application", cascade="all, delete-orphan")
+    packages = relationship("Package", back_populates="application", cascade="all, delete-orphan")
 
 
 class Document(Base):
@@ -59,4 +61,33 @@ class Document(Base):
     path = Column(String(1024))
     checksum = Column(String(128))
     size_bytes = Column(Integer)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    # New fields
+    document_type = Column(String(128), nullable=True)
+    ocr_text = Column(Text, nullable=True)
+    pages = Column(Integer, nullable=True)
+
+    application = relationship("Application", back_populates="documents")
+
+
+class Package(Base):
+    __tablename__ = "packages"
+    id = Column(Integer, primary_key=True)
+    application_id = Column(Integer, ForeignKey("applications.id"), nullable=False)
+    package_path = Column(String(1024))
+    checksum = Column(String(128))
+    metadata = Column(JSON, default={})
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    application = relationship("Application", back_populates="packages")
+
+
+class Draft(Base):
+    __tablename__ = "drafts"
+    id = Column(Integer, primary_key=True)
+    application_id = Column(Integer, ForeignKey("applications.id"), nullable=False)
+    draft_id = Column(String(256))
+    to = Column(String(512))
+    subject = Column(String(512))
+    body = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
