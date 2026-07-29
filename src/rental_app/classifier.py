@@ -1,39 +1,29 @@
 from __future__ import annotations
-from typing import Dict, Any, Optional
+from dataclasses import dataclass
 import re
-import logging
 
-logger = logging.getLogger(__name__)
-
-
+@dataclass
 class ClassificationResult:
-    def __init__(self, document_type: str, confidence: float):
-        self.document_type = document_type
-        self.confidence = confidence
+    document_type: str
+    confidence: float = 0.9
 
 
-def classify_document(filename: str, ocr_text: Optional[str]) -> ClassificationResult:
-    """Simple rule-based classifier using filename and OCR text keywords.
-
-    Returns a ClassificationResult with a document_type key and confidence score.
-    """
-    fname = filename.lower()
-    text = (ocr_text or "").lower()
-    # filename heuristics
-    if any(x in fname for x in ["application", "rental application", "app"]):
-        return ClassificationResult("application", 0.95)
-    if any(x in fname for x in ["id", "driver", "license", "passport"]):
-        return ClassificationResult("id", 0.9)
-    if any(x in fname for x in ["paystub", "pay stubs", "paystub"]):
-        return ClassificationResult("paystubs", 0.9)
-    if any(x in fname for x in ["bank", "statement"]):
-        return ClassificationResult("bank_statements", 0.9)
-    if any(x in fname for x in ["1040", "tax", "irs"]):
-        return ClassificationResult("tax_return", 0.9)
-    # text heuristics
-    if "payroll" in text or "employer" in text or re.search(r"\$\d{1,3}[,\d]*", text):
-        return ClassificationResult("paystubs", 0.6)
-    if "account" in text and "statement" in text:
-        return ClassificationResult("bank_statements", 0.6)
-    # fallback
-    return ClassificationResult("unknown", 0.2)
+def classify_document(filename: str, text: str) -> ClassificationResult:
+    fname = (filename or '').lower()
+    txt = (text or '').lower()
+    # Heuristic rules
+    if 'application' in fname or 'rental application' in txt or 'application form' in txt:
+        return ClassificationResult('application', 0.95)
+    if any(k in fname for k in ('passport', 'driver', 'license')) or any(k in txt for k in ('driver', 'passport', 'id number')):
+        return ClassificationResult('id', 0.95)
+    if 'pay' in fname or 'pay' in txt or 'paystub' in fname:
+        return ClassificationResult('paystubs', 0.9)
+    if 'tax' in fname or 'irs' in txt or '1040' in txt:
+        return ClassificationResult('tax_return', 0.9)
+    if 'bank' in fname or 'statement' in fname or 'account' in txt:
+        return ClassificationResult('bank_statements', 0.9)
+    if 'employment' in fname or 'employer' in txt or 'employment letter' in txt:
+        return ClassificationResult('employment_letter', 0.85)
+    if 'support' in fname or 'reference' in txt or 'letter' in txt:
+        return ClassificationResult('supporting_documents', 0.7)
+    return ClassificationResult('unknown', 0.5)

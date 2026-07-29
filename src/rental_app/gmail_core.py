@@ -1,125 +1,115 @@
 from __future__ import annotations
-from typing import Optional
+import os
 import json
 import logging
-from pathlib import Path
+from typing import Optional, List, Dict
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
 
-from rental_app.config import load_config
-from rental_app.credential_store import CredentialStore, CredentialStoreError
-
-logger = logging.getLogger(__name__)
-
-# Lazy imports for Google libraries
-try:
-    from google.auth.transport.requests import Request  # type: ignore
-    from google.oauth2.credentials import Credentials  # type: ignore
-    from google_auth_oauthlib.flow import InstalledAppFlow  # type: ignore
-    from googleapiclient.discovery import build  # type: ignore
-except Exception:  # pragma: no cover
-    Request = None
-    Credentials = None
-    InstalledAppFlow = None
-    build = None
+LOG = logging.getLogger(__name__)
 
 SCOPES = [
-    "https://www.googleapis.com/auth/gmail.modify",
-    "https://www.googleapis.com/auth/gmail.compose",
+    'https://www.googleapis.com/auth/gmail.modify',
+    'https://www.googleapis.com/auth/gmail.compose',
+    'https://www.googleapis.com/auth/gmail.send',
 ]
 
-
-class GmailClientError(Exception):
-    """Generic Gmail client error."""
+TOKEN_PATH = os.getenv('GMAIL_TOKEN_PATH', './config/token.json')
+CREDENTIALS_PATH = os.getenv('GMAIL_CREDENTIALS_PATH', './config/credentials.json')
 
 
 class GmailClient:
-    """Minimal Gmail client for authentication.
+    def __init__(self, credentials_path: Optional[str] = None, token_path: Optional[str] = None):
+        self.credentials_path = credentials_path or CREDENTIALS_PATH
+        self.token_path = token_path or TOKEN_PATH
+        self.creds: Optional[Credentials] = None
+        self.service = None
 
-    This class focuses on authentication and building a service client. Other
-    operations (watch, history, processing) will be added in subsequent commits.
-    """
-
-    def __init__(self, credential_store: CredentialStore, config_path: Optional[str] = None):
-        self.credential_store = credential_store
-        self.cfg = load_config(config_path)
-        self.credentials_path = Path(self.cfg.gmail.credentials_path) if getattr(self.cfg, 'gmail', None) else None
-        self._service = None
-        self._account_email = None
-
-    @property
-    def service(self):
-        return self._service
-
-    def authenticate(self, token_key: str = "tac_default") -> str:
-        """Authenticate with Gmail and persist token via CredentialStore.
-
-        :param token_key: fallback key under which a temporary token might be stored
-        :return: authenticated account email
-        :raises GmailClientError: on failures or missing libraries
-        """
-        if Credentials is None or InstalledAppFlow is None or build is None or Request is None:
-            logger.error("Google libraries not installed")
-            raise GmailClientError("Google libraries are not installed. Please install google-auth-oauthlib and google-api-python-client")
-
+    def authenticate(self) -> None:
+        """Run InstalledAppFlow if necessary and build service."""
         creds = None
-
-        # Try load token by token_key
-        try:
-            token_json = self.credential_store.load(token_key)
-        except CredentialStoreError as exc:
-            logger.warning("Credential store read failed for key %s: %s", token_key, exc)
-            token_json = None
-
-        if token_json:
+        if os.path.exists(self.token_path):
             try:
-                info = json.loads(token_json)
-                creds = Credentials.from_authorized_user_info(info, SCOPES)  # type: ignore[arg-type]
-            except Exception as exc:
-                logger.exception("Failed to load credentials from token: %s", exc)
+                creds = Credentials.from_authorized_user_file(self.token_path, SCOPES)
+            except Exception:
+                LOG.exception("Failed to load token.json; will re-auth")
                 creds = None
-
-        # Refresh if expired and refresh_token present
-        try:
-            if creds and getattr(creds, 'expired', False) and getattr(creds, 'refresh_token', None):
-                creds.refresh(Request())
-        except Exception:
-            creds = None
-
-        if not creds or not getattr(creds, 'valid', False):
-            # Run OAuth flow using client secrets
-            if not self.credentials_path or not self.credentials_path.exists():
-                logger.error("Credentials file missing at %s", self.credentials_path)
-                raise GmailClientError(f"Credentials file not found at {self.credentials_path}")
-            try:
-                flow = InstalledAppFlow.from_client_secrets_file(str(self.credentials_path), SCOPES)
+        if not creds or not creds.valid:
+            if creds and creds.expired and creds.refresh_token:
+                try:
+                    creds.refresh(Request())
+                except Exception:
+                    creds = None
+            if not creds:
+                if not os.path.exists(self.credentials_path):
+                    raise FileNotFoundError(f"OAuth credentials not found at {self.credentials_path}")
+                flow = InstalledAppFlow.from_client_secrets_file(self.credentials_path, SCOPES)
                 creds = flow.run_local_server(port=0)
-            except Exception as exc:
-                logger.exception("OAuth flow failed: %s", exc)
-                raise GmailClientError("OAuth authentication failed") from exc
+            # save the token
+            with open(self.token_path, 'w') as fh:
+                fh.write(creds.to_json())
+        self.creds = creds
+        self.service = build('gmail', 'v1', credentials=self.creds, cache_discovery=False)
+        LOG.info("Gmail service built and authenticated")
 
-        try:
-            service = build('gmail', 'v1', credentials=creds, cache_discovery=False)
-            profile = service.users().getProfile(userId='me').execute()
-            account_email = profile.get('emailAddress') or token_key
-            self._service = service
-            self._account_email = account_email
-            # Persist token under account_email
-            try:
-                token_to_store = creds.to_json()
-                self.credential_store.save(account_email, token_to_store)
-                # remove temporary token if different
-                if token_key != account_email:
-                    try:
-                        self.credential_store.delete(token_key)
-                    except Exception:
-                        pass
-            except CredentialStoreError as exc:
-                logger.warning("Failed to save token for %s: %s", account_email, exc)
-            logger.info("Authenticated %s", account_email)
-            return account_email
-        except Exception as exc:
-            logger.exception("Failed to initialize Gmail service: %s", exc)
-            raise GmailClientError("Failed to initialize Gmail service") from exc
+    def get_label_id(self, label_name: str) -> Optional[str]:
+        """Return the Gmail label ID for a given label name, or None if not found."""
+        if not self.service:
+            raise RuntimeError("Gmail service not initialized")
+        labels = self.service.users().labels().list(userId='me').execute().get('labels', [])
+        for l in labels:
+            if l.get('name') == label_name:
+                return l.get('id')
+        return None
 
-    def close(self) -> None:
-        self._service = None
-        logger.debug("GmailClient closed")
+    def list_messages(self, label_ids: Optional[List[str]] = None, q: Optional[str] = None) -> List[Dict]:
+        if not self.service:
+            raise RuntimeError("Gmail service not initialized")
+        msgs = []
+        req = self.service.users().messages().list(userId='me', labelIds=label_ids or [], q=q)
+        while req:
+            resp = req.execute()
+            for m in resp.get('messages', []) or []:
+                msgs.append(m)
+            req = self.service.users().messages().list_next(req, resp)
+        return msgs
+
+    def get_message(self, message_id: str, fmt: str = 'full') -> Dict:
+        if not self.service:
+            raise RuntimeError("Gmail service not initialized")
+        return self.service.users().messages().get(userId='me', id=message_id, format=fmt).execute()
+
+    def get_attachment(self, message_id: str, attachment_id: str) -> Dict:
+        if not self.service:
+            raise RuntimeError("Gmail service not initialized")
+        return self.service.users().messages().attachments().get(userId='me', messageId=message_id, id=attachment_id).execute()
+
+    def create_draft(self, raw_message: Dict) -> Dict:
+        if not self.service:
+            raise RuntimeError("Gmail service not initialized")
+        return self.service.users().drafts().create(userId='me', body={'message': raw_message}).execute()
+
+    def send_draft(self, draft_id: str) -> Dict:
+        if not self.service:
+            raise RuntimeError("Gmail service not initialized")
+        return self.service.users().drafts().send(userId='me', body={'id': draft_id}).execute()
+
+    def send_message_raw(self, raw_message: Dict) -> Dict:
+        if not self.service:
+            raise RuntimeError("Gmail service not initialized")
+        return self.service.users().messages().send(userId='me', body={'raw': raw_message}).execute()
+
+    def watch(self, topic_name: str, label_ids: Optional[List[str]] = None) -> Dict:
+        if not self.service:
+            raise RuntimeError("Gmail service not initialized")
+        body = {'topicName': topic_name}
+        if label_ids:
+            body['labelIds'] = label_ids
+        return self.service.users().watch(userId='me', body=body).execute()
+
+    def stop_watch(self) -> Dict:
+        if not self.service:
+            raise RuntimeError("Gmail service not initialized")
+        return self.service.users().stop(userId='me').execute()

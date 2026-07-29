@@ -1,0 +1,16 @@
+pypdf>=3.0.0
+PyMuPDF>=1.22.0
+pytesseract>=0.3.10
+Pillow>=9.0.0
+
+google-auth>=2.20.0
+google-auth-oauthlib>=1.0.0
+google-api-python-client>=2.70.0
+google-cloud-pubsub>=3.10.0
+
+SQLAlchemy>=2.0
+PyYAML>=6.0
+python-dotenv>=1.0
+werkzeug>=2.2
+
+pytest>=7.0

@@ -1,62 +1,57 @@
+# Minimal OCR helpers: pypdf for text extraction, PyMuPDF + pytesseract for OCR
+from __future__ import annotations
+import os
 import logging
-from typing import List, Dict, Any, Optional
-from pathlib import Path
+from typing import Dict
+from pypdf import PdfReader
 
-import fitz  # PyMuPDF
-import pytesseract
-from PIL import Image
+LOG = logging.getLogger(__name__)
 
-logger = logging.getLogger(__name__)
+try:
+    import fitz  # PyMuPDF
+    from PIL import Image
+    import pytesseract
+except Exception:
+    fitz = None
 
 
 def extract_text_from_pdf(path: str) -> Dict[int, str]:
-    """Extract text per page from a PDF using PyMuPDF.
-
-    Returns a dict mapping page number (0-based) to extracted text.
-    """
-    doc = fitz.open(path)
-    texts: Dict[int, str] = {}
-    for i, page in enumerate(doc):
-        text = page.get_text()
-        texts[i] = text
-    doc.close()
+    """Extract text from a PDF using pypdf's text extraction. Returns dict page->text."""
+    texts = {}
+    reader = PdfReader(path)
+    for i, page in enumerate(reader.pages):
+        try:
+            txt = page.extract_text() or ''
+        except Exception:
+            txt = ''
+        texts[i] = txt
     return texts
 
 
-def is_scanned_pdf(texts: Dict[int, str], threshold: float = 0.1) -> bool:
-    """Decide if a PDF is scanned based on fraction of pages with little text.
-
-    threshold: fraction of pages with text below which the document is considered scanned.
-    """
+def is_scanned_pdf(texts: Dict[int, str]) -> bool:
+    # If fewer than half of pages have text, treat as scanned
     if not texts:
         return True
-    low_text_pages = sum(1 for t in texts.values() if len((t or "").strip()) < 50)
-    frac = low_text_pages / max(1, len(texts))
-    return frac >= threshold
+    non_empty = sum(1 for t in texts.values() if t and t.strip())
+    return non_empty < max(1, len(texts) / 2)
 
 
-def ocr_image_bytes(image_bytes: bytes, lang: str = "eng") -> str:
-    """Run OCR on raw image bytes and return extracted text."""
-    with Image.open(BytesIO(image_bytes)) as img:
-        text = pytesseract.image_to_string(img, lang=lang)
-    return text
-
-
-# Helper to perform OCR on each page image if PDF is scanned
-from io import BytesIO
-
-
-def ocr_pdf(path: str, lang: str = "eng") -> Dict[int, str]:
-    """Perform OCR on scanned PDF pages and return per-page text.
-
-    Converts each page to an image and runs pytesseract.
-    """
-    texts: Dict[int, str] = {}
+def ocr_pdf(path: str) -> Dict[int, str]:
+    """Run OCR on each page and return dict page->text. Requires PyMuPDF + pytesseract."""
+    if fitz is None:
+        raise RuntimeError("PyMuPDF (fitz) is required for OCR. Install PyMuPDF and pytesseract.")
     doc = fitz.open(path)
-    for i, page in enumerate(doc):
-        pix = page.get_pixmap(dpi=300)
+    out = {}
+    for page_num in range(len(doc)):
+        page = doc.load_page(page_num)
+        pix = page.get_pixmap(alpha=False)
         img_bytes = pix.tobytes()
-        with Image.open(BytesIO(img_bytes)) as img:
-            texts[i] = pytesseract.image_to_string(img, lang=lang)
-    doc.close()
-    return texts
+        try:
+            from io import BytesIO
+            im = Image.open(BytesIO(img_bytes))
+            txt = pytesseract.image_to_string(im)
+        except Exception as e:
+            LOG.exception('OCR failed on page %s: %s', page_num, e)
+            txt = ''
+        out[page_num] = txt
+    return out
